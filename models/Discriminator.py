@@ -28,7 +28,7 @@ class Encoder(nn.Module):
     DCGAN ENCODER NETWORK
     """
 
-    def __init__(self, isize, nz, nc, ndf, ngpu, n_extra_layers=0, add_final_conv=True):
+    def __init__(self, isize, nz, nc, ndf, ngpu, n_extra_layers=0, add_final_conv=True, add_rotation_classifier=True):
         super(Encoder, self).__init__()
         self.ngpu = ngpu
         # assert isize % 16 == 0, "isize has to be a multiple of 16"
@@ -71,6 +71,9 @@ class Encoder(nn.Module):
         if add_final_conv:
             main.add_module('final-{0}-{1}-conv'.format(cndf, 1),
                             nn.Conv2d(cndf, nz, self.last_layer_conv, 1, 0, bias=False))
+        if add_rotation_classifier:
+            main.add_module('classifier-{0}-{1}-conv-linear'.format(cndf, 1),
+                            nn.Linear(cndf * 16, 4))
 
         self.main = main
 
@@ -79,7 +82,6 @@ class Encoder(nn.Module):
             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
         else:
             output = self.main(input)
-
         return output
 
 
@@ -96,14 +98,17 @@ class NetD(nn.Module):
         model = Encoder(img_size, 1, n_channels, ngf, ngpu, n_extra_layers)
         layers = list(model.main.children())
 
-        self.features = nn.Sequential(*layers[:-1])
+        self.features = nn.Sequential(*layers[:-2])
+        self.disc = nn.Sequential(layers[-2])
+        self.disc.add_module('Sigmoid', nn.Sigmoid())
         self.classifier = nn.Sequential(layers[-1])
-        self.classifier.add_module('Sigmoid', nn.Sigmoid())
+        self.softmax = nn.Softmax()
 
     def forward(self, x):
         features = self.features(x)
         features = features
-        classifier = self.classifier(features)
-        classifier = classifier.view(-1, 1).squeeze(1)
-
-        return classifier, features
+        disc = self.disc(features)
+        classifier = self.classifier(features.view(features.size(0) * 4, -1))
+        disc = disc.view(-1, 1).squeeze(1)
+        rotation_probs = self.softmax(classifier)
+        return disc, classifier, rotation_probs, features

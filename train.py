@@ -4,6 +4,7 @@ from models.Discriminator import *
 from test import *
 from dataloader import *
 from pathlib import Path
+import torch.nn.functional as F
 
 parser = ArgumentParser()
 parser.add_argument('--config', type=str, default='configs/config_train.yaml', help="training configuration")
@@ -55,7 +56,6 @@ def main():
     discriminator.train()
 
     for epoch in range(num_epochs + 1):
-
         epoch_ae_loss = 0
         epoch_total_loss = 0
 
@@ -102,14 +102,26 @@ def main():
             output = unet(img)
 
             # Forward Discriminator
-            pred_real, feat_real = discriminator(target)
-            pred_fake, feat_fake = discriminator(output.detach())
+            x = output.detach()
+            x_90 = x.transpose(2, 3)
+            x_180 = x.flip(2, 3)
+            x_270 = x.transpose(2, 3).flip(2, 3)
+            generated_data = torch.cat((x, x_90, x_180, x_270), 0)
+
+            x = target
+            x_90 = x.transpose(2, 3)
+            x_180 = x.flip(2, 3)
+            x_270 = x.transpose(2, 3).flip(2, 3)
+            real_data = torch.cat((x, x_90, x_180, x_270), 0)
+
+            pred_real, classification_real, rot_probs_real, feat_real = discriminator(real_data)
+            pred_fake, classification_fake, rot_probs_fake, feat_fake = discriminator(generated_data)
 
             # ===================backward====================
 
             # Backward Unet
             optimizer_u.zero_grad()
-            err_g_adv = l_adv(discriminator(target)[1], discriminator(output)[1])
+            err_g_adv = l_adv(feat_real, feat_fake)
             AE_loss = criterion(output, target)
             loss = config['adv_coeff'] * err_g_adv + AE_loss
 
@@ -126,7 +138,24 @@ def main():
             err_d_real = l_bce(pred_real, real_label)
             err_d_fake = l_bce(pred_fake, fake_label)
 
-            err_d = (err_d_real + err_d_fake) * 0.5
+            batch_size = 128
+            rot_labels = torch.zeros(4 * batch_size).cuda()
+            for i in range(4 * batch_size):
+                if i < batch_size:
+                    rot_labels[i] = 0
+                elif i < 2 * batch_size:
+                    rot_labels[i] = 1
+                elif i < 3 * batch_size:
+                    rot_labels[i] = 2
+                else:
+                    rot_labels[i] = 3
+            rot_labels = F.one_hot(rot_labels.to(torch.int64), 4).float()
+            d_real_class_loss = torch.sum(F.binary_cross_entropy_with_logits(
+                input=classification_real,
+                target=rot_labels))
+            err_d_rot = d_real_class_loss * config['rot_loss_weight']
+
+            err_d = (err_d_real + err_d_fake) * 0.5 + err_d_rot
             err_d.backward()
             optimizer_d.step()
 

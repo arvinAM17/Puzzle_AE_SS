@@ -33,3 +33,5 @@ alpha: 2
 adv_coeff: 0.02
 
 
+# Rotation Loss
+rot_loss_weight: 0.5
