@@ -1,10 +1,15 @@
 from torch import nn
 from random import randrange
 from models.Discriminator import *
-from test import *
+from test import main as test_main
+from utils.utils import *
 from dataloader import *
 from pathlib import Path
 import torch.nn.functional as F
+from argparse import ArgumentParser
+from models.Unet import *
+
+# import
 
 parser = ArgumentParser()
 parser.add_argument('--config', type=str, default='configs/config_train.yaml', help="training configuration")
@@ -58,6 +63,7 @@ def main():
     for epoch in range(num_epochs + 1):
         epoch_ae_loss = 0
         epoch_total_loss = 0
+        epoch_disc_loss = 0
 
         for data in train_dataloader:
             rand_number = randrange(4)
@@ -115,13 +121,13 @@ def main():
             real_data = torch.cat((x, x_90, x_180, x_270), 0)
 
             pred_real, classification_real, rot_probs_real, feat_real = discriminator(real_data)
-            pred_fake, classification_fake, rot_probs_fake, feat_fake = discriminator(generated_data)
+            pred_fake, classification_fake, rot_probs_fake, feat_fake = discriminator(generated_data.detach())
 
             # ===================backward====================
 
             # Backward Unet
             optimizer_u.zero_grad()
-            err_g_adv = l_adv(feat_real, feat_fake)
+            err_g_adv = l_adv(discriminator(real_data)[3], discriminator(generated_data)[3])
             AE_loss = criterion(output, target)
             loss = config['adv_coeff'] * err_g_adv + AE_loss
 
@@ -131,14 +137,14 @@ def main():
             optimizer_u.step()
 
             # Backward Discriminator
-            real_label = torch.ones(size=(img.shape[0],), dtype=torch.float32).cuda()
-            fake_label = torch.zeros(size=(img.shape[0],), dtype=torch.float32).cuda()
+            real_label = torch.ones(size=(img.shape[0] * 4,), dtype=torch.float32).cuda()
+            fake_label = torch.zeros(size=(img.shape[0] * 4,), dtype=torch.float32).cuda()
 
             optimizer_d.zero_grad()
             err_d_real = l_bce(pred_real, real_label)
             err_d_fake = l_bce(pred_fake, fake_label)
 
-            batch_size = 128
+            batch_size = img.shape[0]
             rot_labels = torch.zeros(4 * batch_size).cuda()
             for i in range(4 * batch_size):
                 if i < batch_size:
@@ -158,17 +164,21 @@ def main():
             err_d = (err_d_real + err_d_fake) * 0.5 + err_d_rot
             err_d.backward()
             optimizer_d.step()
+            epoch_disc_loss += err_d
 
         # ===================log========================
         ae_loss_list.append(epoch_ae_loss)
         scheduler.step(epoch_ae_loss)
 
-        print('epoch [{}/{}], epoch_total_loss:{:.4f}, epoch_ae_loss:{:.4f}, err_adv:{:.4f}'
-              .format(epoch + 1, num_epochs, epoch_total_loss, epoch_ae_loss, err_g_adv))
+        print('epoch [{}/{}], epoch_total_loss:{:.4f}, epoch_ae_loss:{:.4f}, err_adv:{:.4f}, err_disc:{:.4f}'
+              .format(epoch + 1, num_epochs, epoch_total_loss, epoch_ae_loss, err_g_adv, epoch_disc_loss))
 
         with open(checkpoint_path + 'log_{}.txt'.format(normal_class), "a") as log_file:
             log_file.write('\n epoch [{}/{}], loss:{:.4f}, epoch_ae_loss:{:.4f}, err_adv:{:.4f}'
                            .format(epoch + 1, num_epochs, epoch_total_loss, epoch_ae_loss, err_g_adv))
+
+        if epoch % 10 == 0:
+            test_main()
 
         if epoch % 500 == 0:
             show_process_for_trainortest(img, output, orig_img, train_output_path + str(epoch))

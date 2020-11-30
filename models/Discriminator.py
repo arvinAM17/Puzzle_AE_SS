@@ -73,7 +73,7 @@ class Encoder(nn.Module):
                             nn.Conv2d(cndf, nz, self.last_layer_conv, 1, 0, bias=False))
         if add_rotation_classifier:
             main.add_module('classifier-{0}-{1}-conv-linear'.format(cndf, 1),
-                            nn.Linear(cndf * 16, 4))
+                            nn.Conv2d(cndf, 4, self.last_layer_conv, 1, 0, bias=False))
 
         self.main = main
 
@@ -108,7 +108,7 @@ class NetD(nn.Module):
         features = self.features(x)
         features = features
         disc = self.disc(features)
-        classifier = self.classifier(features.view(features.size(0) * 4, -1))
+        classifier = self.classifier(features).view(-1, 4)
         disc = disc.view(-1, 1).squeeze(1)
         rotation_probs = self.softmax(classifier)
         return disc, classifier, rotation_probs, features
