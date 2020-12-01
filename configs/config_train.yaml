@@ -34,4 +34,4 @@ adv_coeff: 0.02
 
 
 # Rotation Loss
-rot_loss_weight: 0.5
+rot_loss_weight: 1.4

@@ -31,7 +31,7 @@ def test(model, normal_class, perm_list, perm_cost, test_dataloader):
     model.eval()
 
     for ind, data in enumerate(test_dataloader):
-        print('{}/10000'.format(ind * test_dataloader.batch_size))
+        # print('{}/10000'.format(ind * test_dataloader.batch_size))
         inputs, labels = data
         target = inputs
         target = Variable(target).cuda()
@@ -125,9 +125,9 @@ def get_avg_val_error_per_permutation(model, permutation_list, val_dataloader):
     return permutation_cost
 
 
-def main():
+def main(epoch_num: int = 2000):
     args = parser.parse_args()
-    config = get_config(args.config)
+    config = get_config('configs/config_test.yaml')
 
     n_channel = config['n_channel']
     normal_class = config["normal_class"]
@@ -136,7 +136,7 @@ def main():
     _, val_dataloader, test_dataloader = load_data(config)
 
     model = UNet(n_channel, n_channel).cuda()
-    model.load_state_dict(torch.load(checkpoint_path + '{}.pth'.format(str(config['last_epoch']))))
+    model.load_state_dict(torch.load(checkpoint_path + '{}.pth'.format(str(epoch_num))))
 
     permutation_list = get_all_permutations()
 
