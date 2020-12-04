@@ -7,7 +7,7 @@ normal_class: 1
 
 # training parameters
 num_epochs: 2000
-batch_size: 128   # 8 for MVTec and medical datasets
+batch_size: 64   # 8 for MVTec and medical datasets
 
 # Unet
 base_channel: 64
@@ -34,4 +34,4 @@ adv_coeff: 0.02
 
 
 # Rotation Loss
-rot_loss_weight: 1.4
+rot_loss_weight: 4

@@ -6,6 +6,7 @@ from sklearn.metrics import roc_auc_score, roc_curve, auc
 from models.Unet import *
 from utils.utils import *
 from dataloader import *
+from models.Discriminator import *
 
 parser = ArgumentParser()
 parser.add_argument('--config', type=str, default='configs/config_test.yaml', help="training configuration")
@@ -31,7 +32,7 @@ def test(model, normal_class, perm_list, perm_cost, test_dataloader):
     model.eval()
 
     for ind, data in enumerate(test_dataloader):
-        # print('{}/10000'.format(ind * test_dataloader.batch_size))
+        print('{}/10000'.format(ind * test_dataloader.batch_size))
         inputs, labels = data
         target = inputs
         target = Variable(target).cuda()
@@ -125,7 +126,7 @@ def get_avg_val_error_per_permutation(model, permutation_list, val_dataloader):
     return permutation_cost
 
 
-def main(epoch_num: int = 2000):
+def main(epoch_num: int = 1600):
     args = parser.parse_args()
     config = get_config('configs/config_test.yaml')
 
@@ -143,6 +144,22 @@ def main(epoch_num: int = 2000):
     perm_cost = get_avg_val_error_per_permutation(model, permutation_list, val_dataloader)
     auc_dict = test(model, normal_class, permutation_list, perm_cost, test_dataloader)
     print(auc_dict)
+
+
+def test_disc(epoch_num: int = 1600):
+    args = parser.parse_args()
+    config = get_config(args.config)
+
+    n_channel = config['n_channel']
+    normal_class = config["normal_class"]
+    checkpoint_path = "outputs/{}/{}/checkpoints/".format(config['dataset_name'], normal_class)
+
+    _, val_dataloader, test_dataloader = load_data(config)
+
+    model = NetD(config['image_size'], n_channel, 0).cuda()
+    model.load_state_dict(torch.load(checkpoint_path + 'netd_{}.pth'.format(str(epoch_num))))
+
+    pass
 
 
 if __name__ == '__main__':

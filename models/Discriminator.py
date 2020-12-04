@@ -101,7 +101,7 @@ class NetD(nn.Module):
         self.features = nn.Sequential(*layers[:-2])
         self.disc = nn.Sequential(layers[-2])
         self.disc.add_module('Sigmoid', nn.Sigmoid())
-        self.classifier = nn.Sequential(layers[-1])
+        self.classifier = layers[-1]
         self.softmax = nn.Softmax()
 
     def forward(self, x):
